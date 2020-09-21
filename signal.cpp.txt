@@ -1,0 +1,89 @@
+#include <unistd.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <signal.h>
+#include <string.h>
+void handler(int s){
+    printf("你是杀不死我的 %d\n",s);
+}
+typedef void (*handler_t)(int s);
+
+int main(void){
+    handler_t old = NULL;
+    //自定义处理函数
+   if(( old = signal(SIGINT,handler)) == SIG_ERR) //返回值是旧的信号处理函数
+        perror("signal"),exit(1);
+    while(1){
+        if( getchar() =='\n')
+            break;
+    }
+    //恢复信号缺省处理
+    signal(SIGINT,old);
+
+    while(1){
+        printf(".");
+        fflush(stdout);
+        sleep(1);
+    }
+}
+
+
+#include <unistd.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <signal.h>
+#include <string.h>
+void handler(int s){
+    printf("signal: \n");
+    sleep(5);
+    printf("signal end\n");
+}
+
+typedef void (*handler_t)(int s);
+
+int main(void){
+    handler_t old = NULL;
+    if ((old = signal(SIGINT,handler)) == SIG_ERR)
+        perror("signal"),exit(1);
+    while(1){
+        printf(".");
+        fflush(stdout);
+        sleep(1);
+    }
+}
+
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <signal.h>
+
+int v = 0; //统计对的个数
+int x = 0; //统计错误的个数
+
+void handler(int s){
+    printf("时间到了:v=%d x=%d \n",v,x);
+    exit(0);
+}
+
+int main(void){
+    signal(SIGALRM,handler);
+    alarm(20);
+
+    srand(time(NULL));
+    int ret;
+    int i;
+    for( i = 0;i < 10;i++){
+        int left = rand() % 10;
+        int right = rand() % 10;
+        printf("%d+%d= ",left,right);
+        scanf("%d",&ret);
+        if(left+right == ret){
+            v++;
+        }else{
+            x++;
+        } 
+    }
+    printf("做的太快了:v=%d x=%d\n",v,x);
+}   
+
