@@ -1,0 +1,62 @@
+#include <sys/types.h>
+#include <sys/ipc.h>
+#include <sys/msg.h>
+
+int msgget(key_t key, int msgflg); //创建或打开消息队
+
+
+int main(void){
+    int msgid = msgget(1234,IPC_CREAT|0664);//创建消息队列
+    if(msgid == -1)
+        perror("megget"),exit(1);
+    else
+        printf("creat ok\n");
+}
+
+
+
+struct msgbuf{
+    long channel;
+    char buf[100];
+};
+
+
+int main(void){
+    int msgid = msgget(1234,0);
+    if(msgid == -1)
+        perror("msgget"),exit(1);
+
+    struct msgbuf mb;
+    memset(&mb,0x00,sizeof(mb));
+    printf("channel: ");
+    scanf("%d%*c",&mb.channel);
+
+    printf("msg:");
+    fgets(mb.buf,100,st#include <unistd.h>
+#include <stdio.h>
+#include <sys/ipc.h>
+#include <sys/msg.h>
+#include <stdlib.h>
+#include <string.h>
+struct msgbuf{
+    long channel;
+    char buf[100];
+};
+
+int main(void){
+    int msgid = msgget(1234,0); //打开消息队列
+    if(msgid == -1)
+        perror("msgget"),exit(1);
+    struct msgbuf mb;
+    memset(&mb,0x00,sizeof(mb));  //清空结构体
+    long type;
+    printf("channel:");
+    scanf("%d",&type); //输入从哪个通道读取消息
+    msgrcv(msgid,&mb,100,type,0);
+    printf("[%s]\n",mb.buf); //将从消息队列取出的数据打印出来
+}
+din);
+    msgsnd(msgid,&mb,strlen(mb.buf),0);
+}
+
+
