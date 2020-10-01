@@ -1,0 +1,200 @@
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <pthread.h>
+#include <sys/syscall.h>
+void* route(void* args){
+    while(1){
+        printf("xiancheng %u   %d\n",pthread_self(),syscall(SYS_gettid));
+    }
+}
+
+int main(void){
+    pthread_t pid;
+    pthread_create(&pid,NULL,route,NULL); //创建线程
+    while(1){
+        printf("main return %u   %d\n",pthread_self(),syscall(SYS_gettid));
+    }
+    pthread_join(pid,NULL); //回收线程
+}
+#include <stdio.h>
+#include <stdlib.h>
+#include <pthread.h>
+int a;
+int b;
+pthread_mutex_t mutex; //定义互斥量
+void* r1(void* arg){
+    while(1){
+        pthread_mutex_lock(&mutex);
+        a++;
+        b++;
+        if(a != b){
+            printf("%d!=%d\n",a,b);
+            a = 0;
+            b = 0;
+        }
+        pthread_mutex_unlock(&mutex);
+    }
+}
+
+void* r2(void* arg){
+    while(1){
+        pthread_mutex_lock(&mutex);
+        a++;
+        b++;
+        if(a != b){
+            printf("%d!=%d\n",a,b);
+            a = 0;
+            b = 0;
+        }
+        pthread_mutex_unlock(&mutex);
+    }
+}
+
+int main(void){
+    //创建两个线程
+    pthread_t t1,t2;
+    pthread_create(&t1,NULL,r1,NULL);
+    pthread_create(&t2,NULL,r2,NULL);
+    //初始化互斥量
+    pthread_mutex_init(&mutex,NULL);
+    //回收两个线程
+    pthread_join(t1,NULL);
+    pthread_join(t2,NULL);
+    //释放互斥量
+    pthread_mutex_destroy(&mutex);
+}
+#include <stdio.h>
+#include <stdlib.h>
+#include <pthread.h>
+
+void* route(void* arg){
+    while(1){
+        printf(".");
+        fflush(stdout);
+        sleep(1);
+    }
+}
+int main(void){
+    pthread_t tid;
+    pthread_create(&tid,NULL,route,NULL);
+    pthread_detach(tid); //线程分离
+    pthread_exit(NULL); 
+}
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <pthread.h>
+
+int g_ticket = 100;
+pthread_mutex_t mutex;
+void* route(void* arg){
+    char* p = (char*)arg;
+    while(1){
+        pthread_mutex_lock(&mutex);
+        if(g_ticket > 0){
+            printf("%s卖%d\n",p,g_ticket);
+            g_ticket--;
+        }else{
+            pthread_mutex_unlock(&mutex);
+            break;
+        }
+        pthread_mutex_unlock(&mutex);
+        usleep(10000);
+    }
+}
+
+int main(void){
+    pthread_t t1,t2,t3,t4;
+    pthread_create(&t1,NULL,route,"thread1");
+    pthread_create(&t2,NULL,route,"thread2");
+    pthread_create(&t3,NULL,route,"thread3");
+    pthread_create(&t4,NULL,route,"thread4");
+    pthread_mutex_init(&mutex,NULL);
+
+    pthread_join(t1,NULL);
+    pthread_join(t2,NULL);
+    pthread_join(t3,NULL);
+    pthread_join(t4,NULL);
+    pthread_mutex_destroy(&mutex);
+}
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <sys/ipc.h>
+#include <sys/sem.h>
+
+int semid;
+void P(int no){
+    struct sembuf sb[1];
+    sb[0].sem_num = no;
+    sb[0].sem_op = -1;
+    sb[0].sem_flg = 0;
+    semop(semid,sb,1);
+}
+
+void V(int no){
+    struct sembuf sb[1];
+    sb[0].sem_num = no;
+    sb[0].sem_op = 1;
+    sb[0].sem_flg = 0;
+    semop(semid,sb,1);
+}
+
+void get2fork(int no){
+    int left = no;
+    int right = (no + 1)%5;
+    struct sembuf sb[2];
+    sb[0].sem_num = 0;
+    sb[0].sem_op = -1;
+    sb[0].sem_flg = 0;
+    sb[1].sem_num = 1;
+    sb[1].sem_op = -1;
+    sb[1].sem_flg = 0;
+    semop(semid,sb,2);
+}
+void put2fork(int no){
+    int left = no;
+    int right = (no + 1)%5;
+    V(left);
+    V(right);
+}
+void zhexuejia(int no){
+    while(1){
+        printf("%d号哲学家正在思考\n",no);
+        sleep(rand()%4);
+        printf("%d号哲学家饿了,准备吃饭\n",no);
+        get2fork(no);//拿起筷子
+        printf("%d号哲学家结束吃饭\n",no);
+        put2fork(no);//放下筷子
+        sleep(rand()%4);
+    }
+}
+
+
+union semun{
+    int val;
+};
+
+int main(void){
+    //创建5个信号量
+    int semid = semget(1234,5,IPC_CREAT|0666);
+    //设置值
+    union semun su;
+    su.val = 1;
+    int i;
+    for(i = 0;i < 5;i++){
+        semctl(semid,i,SETVAL,su);
+    }
+    //创建5个进程
+    int no = 0;//区分哲学家进程
+    for(i =1;i < 5;i++){
+         if(fork()==0){
+            no = i;
+            break;
+        }
+    }
+    srand(getpid());
+    zhexuejia(no);
+}
+                  
