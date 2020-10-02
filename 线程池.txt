@@ -1,0 +1,109 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <errno.h>
+#include "threadpool"
+
+
+void threadpool_init(threadpool_t* pool,int max_thread){
+    pthread_cond_init(&pool->cond,NULL);
+    pthread_mutex_init(&pool->mutex,NULL);
+    pool->first = NULL;
+    pool->last = NULL;
+    pool->counter = 0;
+    pool->idle = 0;
+    pool->max_pthread = max_pthread;
+    int quit = 0;
+}
+//线程处理函数
+void* routine(void* arg){
+    threadpool* pool = (threadpool*)arg;
+    int timeout = 0;
+    printf("%p thread start\n",pthread_self());
+    while(1){
+        timeout = 0;
+        pthread_mutex_lock(&pool->mutex);
+        pool->idle++; //刚开始,是一个空闲进程
+        while(pool->first == NULL && pool->quit == 0){
+            struct timespec abstime;
+            clock_gettime(CLOCK_REALTIME,&abstime);
+            abstime.tv_sec +=5;
+            int ret = pthread_cond_timedwait(&pool->cond,&pool->mutex,&abstime);
+            if(ret == ETIMEDOUT){
+                timeout = 1;
+                printf("%p timeout\n",pthread_self());
+                break;
+            }
+        }
+        pool->idle--; //得到任务,就不是一个空闲进程
+        if(pool->first != NULL){
+            task_t* tmp = pool -> first;
+            pool->first = tmp->next;
+            pool->first = tmp->next;
+            pthread_mutex_unlock(&pool->mutex);
+            tmp->run(tmp->arg);
+            free(tmp);
+            pthread_mutex_lock(&pool->mutex);
+        }
+        if(pool->first == NULL && timeout == 1){ //等待任务超时后,结束进程  线程总数减一
+            pool->counter--;
+            pthread_mutex_unlock(&pool->mutex);
+            break;
+        }
+        if(pool->first == NULL && pool->quit == 1){ //空闲进程被pthread_cond_bo  唤醒后,结束进程 ,线程总数减一
+            pool->counter--;
+            if(counter == 0){ //最后一个线程
+                pthread_cond_signal(&pool->cond);//通知pthread_destroy继续进行
+            }
+            pthread_mutex_unlock(&pool->mutex);
+            break;
+        }
+        pthread_mutex_unlock(&pool->mutex);
+    }
+    printf("%p thread exit\n",pthread_self());
+}
+
+
+void threadpool_add_task(threadpool_t* pool,void* (*run)(void*),void* arg){
+    task_t* new_task = (task_t*)malloc(sizeof(task_t));
+    new_task->run = run;
+    new_task->arg = arg;
+    //往队列任务中添加任务
+    pthread_mutex_lock(&pool->mutex);
+    if(pool->first == NULL){
+        pool->first = mew_task;
+    }else{
+        pool->last->next = new_task;
+    }
+    pool->last = new_task;
+    //如果有空闲线程,直接唤醒空闲进程,执行当前任务
+    if(pool->idle > 0){
+        pthread_cond_signal(&pool->cond);
+    }else if(pool->counter < pool->max_thread){
+        //如果没有空闲进程且没有达到上限,创建新线程
+        pthread_t tid;
+        pthread_create(&tid,NULL,routine,pool);
+        pool->counter++;
+    }
+    pthread_mutex_unlock(&pool->mutex);
+}
+
+
+void threadpool_destroy(threadpool_t* pool){
+    if(pool->quit == 1) //已被销毁
+        return;
+    pthread_mutex_lock(&pool->mutex);
+    pool->quit = 1;
+    printf("我要杀了线程池\n");
+    if(pool->counter > 0){ //线程池里当前进程个数大于0
+        if(pool->idle > 0){ //线程池里空闲进程的个数大于0
+            pthread_cond_broadcast(&pool->cond); //唤醒所有阻塞的线程,如果正在执
+//行任务则不会接到通知
+        }
+        while(pool->counter > 0){
+            pthread_cond_wait(&pool->cond,&pool->mutex);
+        }
+    }
+    pthread_mutex_unlock(&pool->mutex);
+    pthread_cond_destroy(&pool->cond);
+    pthread_mutex_destroy(&pool->mutex);
+}
