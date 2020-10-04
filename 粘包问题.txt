@@ -1,0 +1,142 @@
+#ifndef __PUBLIC_H__
+#define __PUBLIC_H__
+
+ssize_t readn(int fd, void *buf, size_t count);
+ssize_t writen(int fd, const void *buf, size_t count);
+
+#endif // __PUBLIC_H__
+#include <unistd.h>
+
+
+// 客户端和服务器之间的消息格式
+typedef struct {
+int len; // 网络字节序, 定长部分
+char cont[1024]; // 真正要发送的内容, 变长部分
+}message_t;
+
+
+#include <errno.h>
+#include <unistd.h>
+
+ssize_t readn(int fd, void *buf, size_t count) {
+int nleft = count; // 剩余字节数
+char *p = buf;
+
+while ( nleft > 0 ) {
+int r = read(fd, p, nleft);
+if ( r == 0 ) {
+return count - nleft; // 实际读取的字节数
+}
+if ( r == -1 ) {
+if ( errno == EINTR )
+continue;
+return -1;
+}
+nleft -= r;
+p += r;
+}
+
+return count;
+}
+
+
+makefile:
+
+.PHONY: clean all
+
+TARGET = svr cli
+CC = gcc
+
+all : $(TARGET)
+
+svr : tcp_svr.o public.o
+$(CC) -o $@ $^
+
+cli : tcp_cli.o public.o
+$(CC) -o $@ $^
+
+%.o : %.c
+$(CC) -c $^
+
+clean:
+rm -rf *.o $(TARGET)
+
+客户端:
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <string.h>
+
+int main( void ) {
+int sfd = socket(AF_INET, SOCK_STREAM, 0);
+struct sockaddr_in addr;
+addr.sin_family = AF_INET;
+addr.sin_port = htons(9898);
+inet_aton("192.168.204.200", &addr.sin_addr);
+int r = connect(sfd, (struct sockaddr*)&addr, sizeof(addr));
+if ( r == -1 ) perror("connect"),exit(1);
+
+message_t msg;
+while ( fgets(msg.cont, 1024, stdin) != NULL ) {
+msg.len = htonl(strlen(msg.cont));
+writen(sfd, &msg.len, sizeof(int)); // 发送定长的包头
+write(sfd, msg.cont, strlen(msg.cont));
+
+memset(&msg, 0x00, sizeof(msg));
+readn(sfd, &msg.len, sizeof(int));
+int len = ntohl(msg.len);
+printf("msg len : %d\n", len);
+readn(sfd, msg.cont, len);
+
+printf("=> %s\n", msg.cont);
+}
+}
+
+服务端:
+#include "public.h"
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <string.h>
+
+int tcp_init() {
+int sfd = socket(AF_INET, SOCK_STREAM, 0);
+
+// 在TIME_WAIT状态时，可以重新启动服务器
+int op = 1;
+setsockopt(sfd, SOL_SOCKET, SO_REUSEADDR, &op, sizeof op);
+
+struct sockaddr_in addr;
+addr.sin_family = AF_INET;
+addr.sin_port = htons(9898);
+addr.sin_addr.s_addr = htonl(INADDR_ANY);
+int r = bind(sfd, (struct sockaddr*)&addr, sizeof(addr));
+if ( r == -1 ) perror("bind"),exit(1);
+
+listen(sfd, SOMAXCONN);
+
+return sfd;
+}
+int main( void ) {
+int lfd = tcp_init();
+int cfd = accept(lfd, NULL, NULL);
+message_t msg;
+while ( 1 ) {
+memset(&msg, 0x00, sizeof msg);
+readn(cfd, &msg.len, sizeof(int));
+int len = ntohl(msg.len);
+readn(cfd, msg.cont, len);
+if ( strncmp(msg.cont, "exit", 4) == 0 )
+exit(0);
+
+writen(cfd, &msg.len, sizeof(int));
+writen(cfd, msg.cont, len);
+}
+}
