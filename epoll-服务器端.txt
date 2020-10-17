@@ -1,0 +1,60 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <fcntl.h>
+#include <string.h>
+#include <errno.h>
+#include <sys/epoll.h>
+
+int tcp_init( void ) {
+int lfd = socket(AF_INET, SOCK_STREAM, 0);
+int op = 1;
+setsockopt(lfd, SOL_SOCKET, SO_REUSEADDR, &op, sizeof(op));
+
+struct sockaddr_in addr;
+addr.sin_family = AF_INET;
+addr.sin_port = htons(9898);
+addr.sin_addr.s_addr = htonl(INADDR_ANY);
+int r = bind(lfd, (struct sockaddr*)&addr, sizeof(addr));
+if ( r == -1 ) perror("bind"),exit(1);
+listen(lfd, SOMAXCONN);
+
+return lfd;
+}
+int main( void ) {
+int i;
+int lfd = tcp_init();
+int epfd = epoll_create(1);
+
+struct epoll_event ev, evs[1024];
+ev.events = EPOLLIN;
+ev.data.fd = lfd;
+epoll_ctl(epfd, EPOLL_CTL_ADD, lfd, &ev);
+for ( ; ; ) {
+// r 是就绪的描述符个数
+// evs 中装了已经就绪的描述符的value
+int r = epoll_wait(epfd, evs, 1024, -1);
+if ( r == -1 ) continue;
+for (i=0; i<r; i++) {
+int cfd = evs[i].data.fd;
+if ( cfd == lfd ) { // 说明有客户端链接过来
+int nfd = accept(lfd, NULL, NULL);
+ev.events = EPOLLIN;
+ev.data.fd = nfd;
+epoll_ctl(epfd, EPOLL_CTL_ADD, nfd, &ev); // 加入到红黑树
+} else {
+char buf[1024] = {};
+r = read(cfd, buf, 1024);
+if ( r <= 0 ) {
+// 当对方关闭，从红黑树中删除
+epoll_ctl(epfd, EPOLL_CTL_DEL, cfd, NULL);
+close(cfd);
+} else {
+write(cfd, buf, r);
+}
+}
+}
+}
+}
