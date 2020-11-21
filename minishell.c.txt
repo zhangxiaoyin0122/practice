@@ -1,0 +1,80 @@
+#include <stdio.h>
+#include <unistd.h>
+#include <stdlib.h>
+#include <string.h>
+#include <ctype.h>
+#include <fcntl.h>
+#include <sys/wait.h>
+
+int main (int argc, char *argv[])
+{
+    while(1) {
+        printf("[zhangxiaoyin@localhost]$ ");
+        fflush(stdout);
+        char tmp[1024] = {0};
+        gets(tmp);
+
+        int redirect_flag = 0;
+        char *redirect_file = NULL;
+        char *ptr = tmp;
+        while(*ptr != '\0') {
+            if (*ptr == '>') {
+                *ptr = '\0';//前边的命令到此截止
+                ptr++;
+                redirect_flag = 1; //清空重定向
+                if (*ptr == '>') {
+                    redirect_flag = 2;//表示追加重定向
+                    *ptr = '\0';
+                    ptr++;
+                }
+                while(isspace(*ptr) && *ptr != '\0')ptr++;
+                redirect_file = ptr;
+                while(!isspace(*ptr) && *ptr != '\0')ptr++;
+                *ptr = '\0';
+            }
+            ptr++;
+        }
+
+        //解析字符串
+        char *argv[32] = {NULL};
+        int argc = 0;
+        ptr = tmp;
+        while(*ptr != '\0') {
+            if (!isspace(*ptr)) {
+                argv[argc] = ptr;
+                argc++;
+                while(!isspace(*ptr) && *ptr != '\0')ptr++;
+                *ptr = '\0';
+            }
+            ptr++;
+        }
+        argv[argc] = NULL;
+
+        //实现cd命令
+        if (strcmp(argv[0], "cd") == 0) {
+            chdir(argv[1]);
+            continue;
+        }
+        //1. 创建子进程
+        pid_t pid = fork();
+        if (pid < 0) {
+            perror("fork error");
+            return -1;
+        }else if (pid == 0) {
+            //2. 程序替换
+            if (redirect_flag == 1){
+                //清空重定向
+                int fd=open(redirect_file, O_WRONLY|O_CREAT|O_TRUNC, 664);
+                dup2(fd, 1);//让1指向fd的文件
+            }else if (redirect_flag == 2) {
+                //追加重定向
+                int fd=open(redirect_file, O_WRONLY|O_CREAT|O_APPEND, 664);
+                dup2(fd, 1);//让1指向fd的文件
+            }
+            execvp(argv[0], argv);
+            exit(0);//替换失败则直接退出
+        }
+        wait(NULL);//进程等待
+    }
+    return 0;
+}
