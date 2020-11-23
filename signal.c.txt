@@ -1,0 +1,103 @@
+#include <stdio.h>
+#include <unistd.h>
+#include <stdlib.h>
+#include <signal.h>
+
+//no参数--是实际出发本次信号回调函数的信号值
+void (*oldcb)(int);
+
+void sigcb(int no)
+{
+    printf("recv a signal no:%d\n", no);
+    signal(no, oldcb);
+}
+int main (int argc, char *argv[])
+{
+    int a = 10;
+    printf("%d\n", a/0);
+    //signal(信号， 函数地址)；
+    oldcb = signal(SIGINT, sigcb);
+
+    while(1) {
+        printf("下雨天要吃巧克力~~\n");
+        sleep(1);
+    }
+    return 0;
+}
+
+
+#include <stdio.h>
+#include <unistd.h>
+#include <stdlib.h>
+#include <signal.h>
+
+void sigcb(int signo)
+{
+    printf("recv a signo:%d\n", signo);
+}
+int main (int argc, char *argv[])
+{
+    signal(SIGINT, sigcb);
+    signal(40, sigcb);
+    signal(9, sigcb);
+
+    //sigprocmask(操作类型， 新的集合， 老的集合)
+    sigset_t newset, oldset;
+    sigemptyset(&newset);//清空集合
+    sigemptyset(&oldset);
+
+    sigaddset(&newset, SIGINT);//将SIGINT添加到集合中
+    sigaddset(&newset, 40);
+    sigprocmask(SIG_BLOCK, &newset, &oldset);//阻塞信号
+
+    getchar();
+
+    sigprocmask(SIG_UNBLOCK, &newset, NULL);
+    //sigprocmask(SIG_SETMASK, &oldset, NULL);
+    while(1) {
+        printf("-------\n");
+        sleep(1);
+    }
+
+    return 0;
+}
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <signal.h>
+
+int main()
+{
+    alarm(3);//设置一个定时器--会取消之前的定时器
+    while(1) {
+        printf("今天的雨真大~适合吃火锅~！\n");
+        sleep(1);
+        //kill(getpid(), 9);
+        //raise(9);
+        //abort();
+    }
+    return 0;
+}
+
+#include <stdio.h>
+#include <unistd.h>
+#include <stdlib.h>
+#include <signal.h>
+
+volatile int a = 1;
+void sigcb(int no)
+{
+    a = 0;
+    printf("a=%d\n", a);
+}
+int main (int argc, char *argv[])
+{
+    signal(SIGINT, sigcb);
+    while(a) {
+    }
+    printf("a=%d,exit\n", a);
+    return 0;
+}
+
+
